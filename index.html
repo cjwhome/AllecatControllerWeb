@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Alicat Mass Flow Controller</title>
+<title>Alicat MFC + Particulate Logger</title>
 <style>
   :root {
     --bg: #0f1419;
@@ -17,6 +17,7 @@
     --good: #4ade80;
     --bad: #f87171;
     --warn: #fbbf24;
+    --pm: #c084fc;
   }
   * { box-sizing: border-box; }
   body {
@@ -78,13 +79,14 @@
   .metric .v { font-size: 20px; font-weight: 600; margin-top: 2px; }
   .metric .u { font-size: 11px; color: var(--muted); }
   .metric.big .v { font-size: 24px; color: var(--accent); }
+  .metric.pm .v { font-size: 24px; color: var(--pm); }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 13px; }
   th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; }
   td input { padding: 5px 8px; }
   tr.active td { background: rgba(61,169,252,.12); }
   .prog-row td:first-child { width: 36px; color: var(--muted); }
-  #log {
+  .logbox {
     background: #0a0e13;
     border: 1px solid var(--border);
     border-radius: 8px;
@@ -103,151 +105,356 @@
   .banner { background: #3a1f1f; border: 1px solid var(--bad); color: #ffd5d5; padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 13px; }
   .mini { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .timer { font-variant-numeric: tabular-nums; }
+  /* tabs */
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .tab {
+    padding: 10px 20px; cursor: pointer; color: var(--muted);
+    border: 1px solid transparent; border-bottom: none;
+    border-radius: 8px 8px 0 0; font-weight: 600; font-size: 14px;
+    margin-bottom: -1px; background: transparent;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); background: var(--panel); border-color: var(--border); }
+  .tabpane { display: none; }
+  .tabpane.active { display: block; }
+  code { background: var(--panel2); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  a.dl { display: none; margin-left: 10px; color: var(--accent); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Alicat Mass Flow Controller</h1>
-  <p class="sub">Web Serial control &middot; 19200 baud 8N1 &middot; ASCII protocol</p>
+  <h1>Alicat MFC + Particulate Logger</h1>
+  <p class="sub">Web Serial &middot; two devices &middot; combined timestamped CSV logging</p>
 
   <div id="nosupport" class="banner" style="display:none">
     This browser does not support the Web Serial API. Use Chrome, Edge, or Opera (desktop) over <b>https://</b> or a local <b>file://</b>.
   </div>
 
-  <!-- CONNECTION -->
-  <div class="panel">
-    <h2>Connection</h2>
-    <div class="row tight">
-      <div style="flex:0 0 120px">
-        <label>Baud rate</label>
-        <select id="baud">
-          <option>9600</option>
-          <option selected>19200</option>
-          <option>38400</option>
-          <option>57600</option>
-          <option>115200</option>
-        </select>
-      </div>
-      <div style="flex:0 0 110px">
-        <label>Device ID</label>
-        <input id="devid" value="D" maxlength="1" style="text-transform:uppercase">
-      </div>
-      <div style="flex:0 0 auto">
-        <button id="btnConnect">Connect</button>
-      </div>
-      <div style="flex:0 0 auto">
-        <button id="btnDisconnect" class="secondary" disabled>Disconnect</button>
-      </div>
-      <div style="flex:1; text-align:right">
-        <span class="status"><span id="dot" class="dot"></span><span id="connText">Disconnected</span></span>
-      </div>
-    </div>
-    <div class="mini" style="margin-top:10px">
-      <label style="display:inline-flex;align-items:center;margin:0;color:var(--muted)">
-        <input type="checkbox" id="filterPort" checked style="width:auto;margin-right:6px">
-        Only show <b style="margin:0 4px">USB Serial Port</b> (FTDI) devices in the port picker
-      </label>
-    </div>
-    <div class="mini">The unit ID is a single letter (A&ndash;Z). Default from factory is A; yours is set to D. All commands are addressed to this ID.</div>
+  <div class="tabs">
+    <button class="tab active" data-tab="flow">Flow Controller</button>
+    <button class="tab" data-tab="pm">Particulate Sensor</button>
+    <button class="tab" data-tab="combined">Combined + Logging</button>
   </div>
 
-  <div class="grid">
-    <!-- LIVE READINGS -->
+  <!-- ================= FLOW CONTROLLER TAB ================= -->
+  <div class="tabpane active" id="tab-flow">
+    <!-- CONNECTION -->
     <div class="panel">
-      <h2>Live Readings</h2>
-      <div class="readout">
-        <div class="metric"><div class="k">Pressure</div><div class="v" id="rPress">&mdash;</div></div>
-        <div class="metric"><div class="k">Temp</div><div class="v" id="rTemp">&mdash;</div><div class="u">&deg;C</div></div>
-        <div class="metric"><div class="k">Volumetric</div><div class="v" id="rVol">&mdash;</div></div>
-        <div class="metric big"><div class="k">Mass Flow</div><div class="v" id="rMass">&mdash;</div></div>
-        <div class="metric"><div class="k">Setpoint</div><div class="v" id="rSet">&mdash;</div></div>
-        <div class="metric"><div class="k">Gas</div><div class="v" id="rGas">&mdash;</div></div>
-      </div>
-      <div class="row tight" style="margin-top:14px">
-        <div style="flex:0 0 auto"><button id="btnPoll" class="secondary" disabled>Poll once</button></div>
-        <div style="flex:0 0 auto">
-          <label style="margin:0">
-            <input type="checkbox" id="autoPoll" style="width:auto;margin-right:6px">Auto-poll
-          </label>
+      <h2>Flow Controller Connection</h2>
+      <div class="row tight">
+        <div style="flex:0 0 120px">
+          <label>Baud rate</label>
+          <select id="baud">
+            <option>9600</option>
+            <option selected>19200</option>
+            <option>38400</option>
+            <option>57600</option>
+            <option>115200</option>
+          </select>
         </div>
         <div style="flex:0 0 110px">
-          <input id="pollMs" type="number" value="500" min="100" step="100">
+          <label>Device ID</label>
+          <input id="devid" value="D" maxlength="1" style="text-transform:uppercase">
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="btnConnect">Connect</button>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="btnDisconnect" class="secondary" disabled>Disconnect</button>
+        </div>
+        <div style="flex:1; text-align:right">
+          <span class="status"><span id="dot" class="dot"></span><span id="connText">Disconnected</span></span>
+        </div>
+      </div>
+      <div class="mini" style="margin-top:10px">
+        <label style="display:inline-flex;align-items:center;margin:0;color:var(--muted)">
+          <input type="checkbox" id="filterPort" checked style="width:auto;margin-right:6px">
+          Only show <b style="margin:0 4px">USB Serial Port</b> (FTDI) devices in the port picker
+        </label>
+      </div>
+      <div class="mini">The unit ID is a single letter (A&ndash;Z). Default from factory is A; yours is set to D. All commands are addressed to this ID.</div>
+    </div>
+
+    <div class="grid">
+      <!-- LIVE READINGS -->
+      <div class="panel">
+        <h2>Live Readings</h2>
+        <div class="readout">
+          <div class="metric"><div class="k">Pressure</div><div class="v" id="rPress">&mdash;</div></div>
+          <div class="metric"><div class="k">Temp</div><div class="v" id="rTemp">&mdash;</div><div class="u">&deg;C</div></div>
+          <div class="metric"><div class="k">Volumetric</div><div class="v" id="rVol">&mdash;</div></div>
+          <div class="metric big"><div class="k">Mass Flow</div><div class="v" id="rMass">&mdash;</div></div>
+          <div class="metric"><div class="k">Setpoint</div><div class="v" id="rSet">&mdash;</div></div>
+          <div class="metric"><div class="k">Gas</div><div class="v" id="rGas">&mdash;</div></div>
+        </div>
+        <div class="row tight" style="margin-top:14px">
+          <div style="flex:0 0 auto"><button id="btnPoll" class="secondary" disabled>Poll once</button></div>
+          <div style="flex:0 0 auto">
+            <label style="margin:0">
+              <input type="checkbox" id="autoPoll" style="width:auto;margin-right:6px">Auto-poll
+            </label>
+          </div>
+          <div style="flex:0 0 110px">
+            <input id="pollMs" type="number" value="500" min="100" step="100">
+            <div class="mini" style="margin-top:2px">interval (ms)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETPOINT -->
+      <div class="panel">
+        <h2>Set Flow Rate</h2>
+        <div class="row">
+          <div>
+            <label>Setpoint</label>
+            <input id="spVal" type="number" value="0" step="0.01">
+          </div>
+          <div style="flex:0 0 auto">
+            <button id="btnSet" disabled>Set</button>
+          </div>
+          <div style="flex:0 0 auto">
+            <button id="btnZero" class="secondary danger" disabled>Set 0</button>
+          </div>
+        </div>
+        <div class="mini">Sends <code>&lt;ID&gt;S&lt;value&gt;</code>. Units (SCCM/SLPM&hellip;) are whatever the controller is configured for. The device echoes a data frame, shown in Live Readings.</div>
+      </div>
+    </div>
+
+    <!-- TIMED PROGRAM -->
+    <div class="panel">
+      <h2>Timed Flow Program</h2>
+      <table id="progTable">
+        <thead>
+          <tr><th></th><th>Flow setpoint</th><th>Hold (seconds)</th><th></th></tr>
+        </thead>
+        <tbody id="progBody"></tbody>
+      </table>
+      <div class="row tight" style="margin-top:12px">
+        <div style="flex:0 0 auto"><button id="btnAddStep" class="secondary">+ Add step</button></div>
+        <div style="flex:0 0 auto"><button id="btnRunProg" disabled>Run program</button></div>
+        <div style="flex:0 0 auto"><button id="btnStopProg" class="danger" disabled>Stop</button></div>
+        <div style="flex:0 0 auto">
+          <label style="margin:0"><input type="checkbox" id="loopProg" style="width:auto;margin-right:6px">Loop</label>
+        </div>
+        <div style="flex:1; text-align:right">
+          <span id="progStatus" class="status"><span class="timer" id="progTimer"></span></span>
+        </div>
+      </div>
+      <div class="mini">Each step sets the flow, holds for the given seconds, then advances. Auto-poll is recommended to watch it track.</div>
+    </div>
+
+    <!-- LOG -->
+    <div class="panel">
+      <h2>Flow Serial Log <button id="btnClearLog" class="secondary" style="float:right;padding:4px 10px;font-size:12px">Clear</button></h2>
+      <div id="log" class="logbox"></div>
+    </div>
+  </div>
+
+  <!-- ================= PARTICULATE SENSOR TAB ================= -->
+  <div class="tabpane" id="tab-pm">
+    <div class="panel">
+      <h2>Particulate Sensor Connection</h2>
+      <div class="row tight">
+        <div style="flex:0 0 120px">
+          <label>Baud rate</label>
+          <select id="pmBaud">
+            <option>9600</option>
+            <option>19200</option>
+            <option>38400</option>
+            <option>57600</option>
+            <option selected>115200</option>
+          </select>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="btnPmConnect">Connect</button>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="btnPmDisconnect" class="secondary" disabled>Disconnect</button>
+        </div>
+        <div style="flex:1; text-align:right">
+          <span class="status"><span id="pmDot" class="dot"></span><span id="pmConnText">Disconnected</span></span>
+        </div>
+      </div>
+      <div class="mini" style="margin-top:10px">
+        <label style="display:inline-flex;align-items:center;margin:0;color:var(--muted)">
+          <input type="checkbox" id="pmFilterPort" checked style="width:auto;margin-right:6px">
+          Only show <b style="margin:0 4px">CP210x</b> (Silicon Labs) devices in the port picker
+        </label>
+      </div>
+      <div class="mini">8N1, 115200 baud. The sensor streams <code>index,PM1.0,PM2.5,PM10</code> (&micro;g/m&sup3;) about once per second. No commands are sent &mdash; this tab only listens.</div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h2>Live Particulate Readings</h2>
+        <div class="readout">
+          <div class="metric pm"><div class="k">PM 1.0</div><div class="v" id="rPm1">&mdash;</div><div class="u">&micro;g/m&sup3;</div></div>
+          <div class="metric pm"><div class="k">PM 2.5</div><div class="v" id="rPm25">&mdash;</div><div class="u">&micro;g/m&sup3;</div></div>
+          <div class="metric pm"><div class="k">PM 10</div><div class="v" id="rPm10">&mdash;</div><div class="u">&micro;g/m&sup3;</div></div>
+        </div>
+        <div class="mini" id="pmLastSeen" style="margin-top:12px">No data yet.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Parsing</h2>
+        <label>Line format</label>
+        <select id="pmMode">
+          <option value="auto" selected>Auto-detect (labeled / CSV / JSON)</option>
+          <option value="labeled">Labeled (PM2.5: 12.3 &hellip;)</option>
+          <option value="csv">CSV (index, PM1.0, PM2.5, PM10)</option>
+          <option value="json">JSON object</option>
+        </select>
+        <div class="mini">
+          Auto-detect handles most sensors. If readings stay blank, check the raw log below and pick a specific format
+          (or tell us the exact line and we&rsquo;ll tune the parser).
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Particulate Serial Log <button id="btnClearPmLog" class="secondary" style="float:right;padding:4px 10px;font-size:12px">Clear</button></h2>
+      <div id="pmlog" class="logbox"></div>
+    </div>
+  </div>
+
+  <!-- ================= COMBINED + LOGGING TAB ================= -->
+  <div class="tabpane" id="tab-combined">
+    <div class="panel">
+      <h2>Live Snapshot</h2>
+      <div class="readout" style="grid-template-columns:repeat(4,1fr)">
+        <div class="metric pm"><div class="k">PM 1.0</div><div class="v" id="cPm1">&mdash;</div><div class="u">&micro;g/m&sup3;</div></div>
+        <div class="metric pm"><div class="k">PM 2.5</div><div class="v" id="cPm25">&mdash;</div><div class="u">&micro;g/m&sup3;</div></div>
+        <div class="metric pm"><div class="k">PM 10</div><div class="v" id="cPm10">&mdash;</div><div class="u">&micro;g/m&sup3;</div></div>
+        <div class="metric big"><div class="k">Mass Flow</div><div class="v" id="cMass">&mdash;</div></div>
+      </div>
+      <div class="readout" style="grid-template-columns:repeat(4,1fr);margin-top:10px">
+        <div class="metric"><div class="k">Flow Setpoint</div><div class="v" id="cSet">&mdash;</div></div>
+        <div class="metric"><div class="k">Gas</div><div class="v" id="cGas">&mdash;</div></div>
+        <div class="metric"><div class="k">Flow Conn.</div><div class="v" id="cFlowConn" style="font-size:15px">Off</div></div>
+        <div class="metric"><div class="k">Sensor Conn.</div><div class="v" id="cPmConn" style="font-size:15px">Off</div></div>
+      </div>
+      <div class="mini">Each device is connected from its own tab. This view samples the latest values from both.</div>
+    </div>
+
+    <div class="panel">
+      <h2>CSV Logging</h2>
+      <div class="row tight">
+        <div style="flex:0 0 auto"><button id="btnChooseFile" class="secondary">Choose log file&hellip;</button></div>
+        <div style="flex:0 0 auto"><button id="btnStartLog" disabled>Start logging</button></div>
+        <div style="flex:0 0 auto"><button id="btnStopLog" class="danger" disabled>Stop</button></div>
+        <div style="flex:0 0 120px">
+          <input id="logMs" type="number" value="1000" min="200" step="100">
           <div class="mini" style="margin-top:2px">interval (ms)</div>
         </div>
+        <div style="flex:1; text-align:right">
+          <span class="status"><span id="logDot" class="dot"></span><span id="logText">Idle</span></span>
+          <a id="dlLink" class="dl" href="#">Download CSV</a>
+        </div>
       </div>
+      <div class="mini" id="logFileName">No log file chosen. Columns: <code>timestamp, pm1_0, pm2_5, pm10, flow_setpoint, mass_flow, gas</code></div>
     </div>
 
-    <!-- SETPOINT -->
     <div class="panel">
-      <h2>Set Flow Rate</h2>
-      <div class="row">
-        <div>
-          <label>Setpoint</label>
-          <input id="spVal" type="number" value="0" step="0.01">
-        </div>
-        <div style="flex:0 0 auto">
-          <button id="btnSet" disabled>Set</button>
-        </div>
-        <div style="flex:0 0 auto">
-          <button id="btnZero" class="secondary danger" disabled>Set 0</button>
-        </div>
-      </div>
-      <div class="mini">Sends <code>&lt;ID&gt;S&lt;value&gt;</code>. Units (SCCM/SLPM&hellip;) are whatever the controller is configured for. The device echoes a data frame, shown in Live Readings.</div>
-    </div>
-  </div>
-
-  <!-- TIMED PROGRAM -->
-  <div class="panel">
-    <h2>Timed Flow Program</h2>
-    <table id="progTable">
-      <thead>
-        <tr><th></th><th>Flow setpoint</th><th>Hold (seconds)</th><th></th></tr>
-      </thead>
-      <tbody id="progBody"></tbody>
-    </table>
-    <div class="row tight" style="margin-top:12px">
-      <div style="flex:0 0 auto"><button id="btnAddStep" class="secondary">+ Add step</button></div>
-      <div style="flex:0 0 auto"><button id="btnRunProg" disabled>Run program</button></div>
-      <div style="flex:0 0 auto"><button id="btnStopProg" class="danger" disabled>Stop</button></div>
-      <div style="flex:0 0 auto">
-        <label style="margin:0"><input type="checkbox" id="loopProg" style="width:auto;margin-right:6px">Loop</label>
-      </div>
-      <div style="flex:1; text-align:right">
-        <span id="progStatus" class="status"><span class="timer" id="progTimer"></span></span>
+      <h2>Logged Rows (latest) <span class="mini" id="rowCount" style="float:right"></span></h2>
+      <div style="max-height:260px;overflow-y:auto">
+        <table id="logTable">
+          <thead>
+            <tr><th>Timestamp</th><th>PM1.0</th><th>PM2.5</th><th>PM10</th><th>Setpoint</th><th>Mass</th><th>Gas</th></tr>
+          </thead>
+          <tbody id="logTableBody"></tbody>
+        </table>
       </div>
     </div>
-    <div class="mini">Each step sets the flow, holds for the given seconds, then advances. Auto-poll is recommended to watch it track.</div>
-  </div>
-
-  <!-- LOG -->
-  <div class="panel">
-    <h2>Serial Log <button id="btnClearLog" class="secondary" style="float:right;padding:4px 10px;font-size:12px">Clear</button></h2>
-    <div id="log"></div>
   </div>
 </div>
 
 <script>
 "use strict";
 
-// ---------- Web Serial state ----------
-let port = null;
-let writer = null;
-let reader = null;
-let readLoopActive = false;
-let lineBuffer = "";
-let pendingResolve = null; // resolves with next received line (for command/response)
-
 const $ = (id) => document.getElementById(id);
 
-// Windows names FTDI-based adapters "USB Serial Port (COMx)". Alicat USB
-// cables use FTDI chips (USB vendor ID 0x0403), so this filter narrows the
-// port picker to those devices. Web Serial can only filter by USB VID/PID,
-// not by the friendly name string.
-const USB_SERIAL_FILTERS = [{ usbVendorId: 0x0403 }];
+// USB vendor-ID filters. Web Serial can only filter by VID/PID, not friendly
+// name. Windows labels FTDI adapters "USB Serial Port" (Alicat USB cables);
+// the particulate sensor uses a Silicon Labs CP210x.
+const FTDI_FILTERS   = [{ usbVendorId: 0x0403 }];
+const CP210X_FILTERS = [{ usbVendorId: 0x10C4 }];
 
-// ---------- Logging ----------
-function log(msg, cls = "log-info") {
-  const el = $("log");
+// Latest values shared with the combined logger.
+const latest = {
+  alicat: { setpoint: null, mass: null, gas: "", pressure: null, temp: null, volumetric: null },
+  pm: { pm1: null, pm25: null, pm10: null },
+};
+
+// ---------- Generic line-buffered serial connection ----------
+class SerialConn {
+  constructor(name, filters) {
+    this.name = name;
+    this.filters = filters;
+    this.port = null;
+    this.writer = null;
+    this.reader = null;
+    this.active = false;
+    this.buf = "";
+    this.onLine = null;   // (line) => void
+    this.onStatus = null; // (connected:boolean) => void
+  }
+  get connected() { return !!this.port; }
+
+  async connect(baudRate, useFilter) {
+    const opts = useFilter ? { filters: this.filters } : {};
+    this.port = await navigator.serial.requestPort(opts);
+    await this.port.open({ baudRate, dataBits: 8, stopBits: 1, parity: "none", flowControl: "none" });
+
+    const enc = new TextEncoderStream();
+    enc.readable.pipeTo(this.port.writable).catch(() => {});
+    this.writer = enc.writable.getWriter();
+
+    this.reader = this.port.readable.getReader();
+    this.active = true;
+    this._readLoop();
+    if (this.onStatus) this.onStatus(true);
+  }
+
+  async _readLoop() {
+    const dec = new TextDecoder();
+    try {
+      while (this.active && this.reader) {
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        this.buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = this.buf.search(/[\r\n]/)) >= 0) {
+          const line = this.buf.slice(0, idx).trim();
+          this.buf = this.buf.slice(idx + 1);
+          if (line.length && this.onLine) this.onLine(line);
+        }
+      }
+    } catch (err) {
+      if (this.active) console.warn(this.name + " read error", err);
+    }
+  }
+
+  async write(str) {
+    if (this.writer) await this.writer.write(str);
+  }
+
+  async disconnect() {
+    this.active = false;
+    try { if (this.reader) { await this.reader.cancel(); this.reader.releaseLock(); } } catch (e) {}
+    try { if (this.writer) { await this.writer.close(); } } catch (e) {}
+    try { if (this.port) { await this.port.close(); } } catch (e) {}
+    this.reader = null; this.writer = null; this.port = null;
+    this.buf = "";
+    if (this.onStatus) this.onStatus(false);
+  }
+}
+
+const alicat = new SerialConn("alicat", FTDI_FILTERS);
+const pm = new SerialConn("pm", CP210X_FILTERS);
+
+// ---------- Logging helpers ----------
+function logTo(boxId, msg, cls = "log-info") {
+  const el = $(boxId);
   const t = new Date().toLocaleTimeString();
   const div = document.createElement("div");
   div.className = cls;
@@ -255,51 +462,20 @@ function log(msg, cls = "log-info") {
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
 }
+const flog = (m, c) => logTo("log", m, c);
+const pmlog = (m, c) => logTo("pmlog", m, c);
 
-// ---------- Connection ----------
-async function connect() {
-  if (!("serial" in navigator)) return;
-  try {
-    const reqOpts = $("filterPort").checked ? { filters: USB_SERIAL_FILTERS } : {};
-    port = await navigator.serial.requestPort(reqOpts);
-    const baudRate = parseInt($("baud").value, 10);
-    await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: "none", flowControl: "none" });
+// =======================================================================
+//  ALICAT FLOW CONTROLLER
+// =======================================================================
+let alicatPending = null; // resolves with next received line
 
-    const textEncoder = new TextEncoderStream();
-    textEncoder.readable.pipeTo(port.writable);
-    writer = textEncoder.writable.getWriter();
-
-    reader = port.readable.getReader();
-    readLoopActive = true;
-    readLoop();
-
-    setConnected(true);
-    log(`Connected @ ${baudRate} baud, device ID "${devId()}"`, "log-info");
-  } catch (err) {
-    log("Connect failed: " + err.message, "log-err");
-    await cleanup();
-    setConnected(false);
-  }
+function devId() {
+  const v = $("devid").value.trim().toUpperCase();
+  return v.length ? v[0] : "A";
 }
 
-async function disconnect() {
-  stopAutoPoll();
-  stopProgram();
-  await cleanup();
-  setConnected(false);
-  log("Disconnected", "log-info");
-}
-
-async function cleanup() {
-  readLoopActive = false;
-  try { if (reader) { await reader.cancel(); reader.releaseLock(); } } catch (e) {}
-  try { if (writer) { await writer.close(); } } catch (e) {}
-  try { if (port) { await port.close(); } } catch (e) {}
-  reader = null; writer = null; port = null;
-  if (pendingResolve) { pendingResolve(null); pendingResolve = null; }
-}
-
-function setConnected(on) {
+alicat.onStatus = (on) => {
   $("dot").classList.toggle("on", on);
   $("connText").textContent = on ? "Connected" : "Disconnected";
   $("btnConnect").disabled = on;
@@ -307,37 +483,37 @@ function setConnected(on) {
   $("btnSet").disabled = !on;
   $("btnZero").disabled = !on;
   $("btnPoll").disabled = !on;
-  $("btnRunProg").disabled = !on;
-}
+  $("btnRunProg").disabled = !on || progRunning;
+  $("cFlowConn").textContent = on ? "On" : "Off";
+  $("cFlowConn").style.color = on ? "var(--good)" : "var(--muted)";
+};
 
-// ---------- Read loop (line-buffered on CR/LF) ----------
-async function readLoop() {
-  const decoder = new TextDecoder();
+alicat.onLine = (line) => {
+  flog("RX  " + line, "log-rx");
+  const frame = parseFrame(line);
+  if (frame) updateReadout(frame);
+  if (alicatPending) { alicatPending(line); alicatPending = null; }
+};
+
+async function alicatConnect() {
   try {
-    while (readLoopActive && reader) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      lineBuffer += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = lineBuffer.search(/[\r\n]/)) >= 0) {
-        const line = lineBuffer.slice(0, idx).trim();
-        lineBuffer = lineBuffer.slice(idx + 1);
-        if (line.length) handleLine(line);
-      }
-    }
+    const baud = parseInt($("baud").value, 10);
+    await alicat.connect(baud, $("filterPort").checked);
+    flog(`Connected @ ${baud} baud, device ID "${devId()}"`, "log-info");
   } catch (err) {
-    if (readLoopActive) log("Read error: " + err.message, "log-err");
+    flog("Connect failed: " + err.message, "log-err");
+    await alicat.disconnect();
   }
 }
 
-function handleLine(line) {
-  log("RX  " + line, "log-rx");
-  const frame = parseFrame(line);
-  if (frame) updateReadout(frame);
-  if (pendingResolve) { pendingResolve(line); pendingResolve = null; }
+async function alicatDisconnect() {
+  stopAutoPoll();
+  stopProgram();
+  await alicat.disconnect();
+  if (alicatPending) { alicatPending(null); alicatPending = null; }
+  flog("Disconnected", "log-info");
 }
 
-// ---------- Alicat data frame parsing ----------
 // MFC frame: ID  Pressure  Temp  Volumetric  Mass  Setpoint  Gas
 function parseFrame(line) {
   const parts = line.split(/\s+/);
@@ -361,54 +537,50 @@ function updateReadout(f) {
   $("rMass").textContent  = f.mass;
   $("rSet").textContent   = f.setpoint;
   $("rGas").textContent   = f.gas || "—";
-}
-
-// ---------- Commands ----------
-function devId() {
-  const v = $("devid").value.trim().toUpperCase();
-  return v.length ? v[0] : "A";
-}
-
-async function send(cmd) {
-  if (!writer) { log("Not connected", "log-err"); return null; }
-  log("TX  " + cmd, "log-tx");
-  await writer.write(cmd + "\r");
-  // Wait briefly for a response line
-  return await waitForLine(800);
+  latest.alicat = {
+    pressure: f.pressure, temp: f.temp, volumetric: f.volumetric,
+    mass: f.mass, setpoint: f.setpoint, gas: f.gas,
+  };
+  updateCombinedLive();
 }
 
 function waitForLine(timeoutMs) {
   return new Promise((resolve) => {
     let done = false;
     const finish = (v) => { if (!done) { done = true; resolve(v); } };
-    pendingResolve = finish;
-    setTimeout(() => { if (pendingResolve === finish) pendingResolve = null; finish(null); }, timeoutMs);
+    alicatPending = finish;
+    setTimeout(() => { if (alicatPending === finish) alicatPending = null; finish(null); }, timeoutMs);
   });
 }
 
-async function poll() {
-  await send(devId());
+async function alicatSend(cmd) {
+  if (!alicat.connected) { flog("Not connected", "log-err"); return null; }
+  flog("TX  " + cmd, "log-tx");
+  await alicat.write(cmd + "\r");
+  return await waitForLine(800);
 }
+
+async function poll() { await alicatSend(devId()); }
 
 async function setFlow(value) {
   const v = Number(value);
-  if (!isFinite(v)) { log("Invalid setpoint", "log-err"); return; }
-  await send(devId() + "S" + v);
+  if (!isFinite(v)) { flog("Invalid setpoint", "log-err"); return; }
+  await alicatSend(devId() + "S" + v);
 }
 
-// ---------- Auto-poll ----------
+// Auto-poll
 let autoPollTimer = null;
 function startAutoPoll() {
   stopAutoPoll();
   const ms = Math.max(100, parseInt($("pollMs").value, 10) || 500);
-  autoPollTimer = setInterval(() => { if (writer) poll(); }, ms);
-  log("Auto-poll started (" + ms + " ms)", "log-info");
+  autoPollTimer = setInterval(() => { if (alicat.connected) poll(); }, ms);
+  flog("Auto-poll started (" + ms + " ms)", "log-info");
 }
 function stopAutoPoll() {
   if (autoPollTimer) { clearInterval(autoPollTimer); autoPollTimer = null; }
 }
 
-// ---------- Timed program ----------
+// Timed program
 let progRunning = false;
 let progAbort = null;
 
@@ -425,13 +597,9 @@ function addStep(flow = 0, secs = 10) {
   tbody.appendChild(tr);
   renumber();
 }
-
 function renumber() {
-  [...$("progBody").children].forEach((tr, i) => {
-    tr.querySelector(".idx").textContent = i + 1;
-  });
+  [...$("progBody").children].forEach((tr, i) => { tr.querySelector(".idx").textContent = i + 1; });
 }
-
 function readSteps() {
   return [...$("progBody").children].map((tr) => ({
     tr,
@@ -439,27 +607,25 @@ function readSteps() {
     secs: Math.max(0, Number(tr.querySelector(".f-secs").value)),
   }));
 }
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function runProgram() {
   const steps = readSteps();
-  if (!steps.length) { log("No program steps", "log-err"); return; }
+  if (!steps.length) { flog("No program steps", "log-err"); return; }
   progRunning = true;
   progAbort = { stop: false };
   const myAbort = progAbort;
   $("btnRunProg").disabled = true;
   $("btnStopProg").disabled = false;
-  log("Program started (" + steps.length + " steps)", "log-info");
+  flog("Program started (" + steps.length + " steps)", "log-info");
 
   do {
     for (let i = 0; i < steps.length && !myAbort.stop; i++) {
       const s = steps[i];
       steps.forEach((x) => x.tr.classList.remove("active"));
       s.tr.classList.add("active");
-      log(`Step ${i + 1}: flow ${s.flow} for ${s.secs}s`, "log-info");
+      flog(`Step ${i + 1}: flow ${s.flow} for ${s.secs}s`, "log-info");
       await setFlow(s.flow);
-
       const endAt = Date.now() + s.secs * 1000;
       while (Date.now() < endAt && !myAbort.stop) {
         const remain = Math.ceil((endAt - Date.now()) / 1000);
@@ -476,21 +642,243 @@ async function runProgram() {
 function stopProgram() {
   if (progAbort) progAbort.stop = true;
   progRunning = false;
-  $("btnRunProg").disabled = !port;
+  $("btnRunProg").disabled = !alicat.connected;
   $("btnStopProg").disabled = true;
   $("progTimer").textContent = "";
   [...$("progBody").children].forEach((tr) => tr.classList.remove("active"));
 }
 
-// ---------- Wire up UI ----------
+// =======================================================================
+//  PARTICULATE SENSOR
+// =======================================================================
+pm.onStatus = (on) => {
+  $("pmDot").classList.toggle("on", on);
+  $("pmConnText").textContent = on ? "Connected" : "Disconnected";
+  $("btnPmConnect").disabled = on;
+  $("btnPmDisconnect").disabled = !on;
+  $("cPmConn").textContent = on ? "On" : "Off";
+  $("cPmConn").style.color = on ? "var(--good)" : "var(--muted)";
+};
+
+pm.onLine = (line) => {
+  pmlog("RX  " + line, "log-rx");
+  const r = parsePM(line);
+  if (r) updatePmReadout(r);
+};
+
+async function pmConnect() {
+  try {
+    const baud = parseInt($("pmBaud").value, 10);
+    await pm.connect(baud, $("pmFilterPort").checked);
+    pmlog(`Connected @ ${baud} baud`, "log-info");
+  } catch (err) {
+    pmlog("Connect failed: " + err.message, "log-err");
+    await pm.disconnect();
+  }
+}
+async function pmDisconnect() {
+  await pm.disconnect();
+  pmlog("Disconnected", "log-info");
+}
+
+// Parse a line into {pm1, pm25, pm10}. Handles labeled, CSV, and JSON.
+function parsePM(line) {
+  const mode = $("pmMode").value;
+  let r = null;
+  if (mode === "labeled" || mode === "auto") r = parsePmLabeled(line);
+  if (!r && (mode === "json" || mode === "auto")) r = parsePmJson(line);
+  if (!r && (mode === "csv" || mode === "auto")) r = parsePmCsv(line);
+  return r;
+}
+
+function parsePmLabeled(line) {
+  // Match "PM<size> <value>" pairs, e.g. PM2.5: 12.3 / PM10=20 / PM 1.0 5.0
+  const re = /pm[\s_]*([0-9]+(?:\.[0-9]+)?)\s*[:=]?\s*([0-9]+(?:\.[0-9]+)?)/ig;
+  let m, out = {}, hit = false;
+  while ((m = re.exec(line))) {
+    const lab = m[1], val = parseFloat(m[2]);
+    if (lab === "1" || lab === "1.0") { out.pm1 = val; hit = true; }
+    else if (lab === "2.5" || lab === "25") { out.pm25 = val; hit = true; }
+    else if (lab === "10" || lab === "10.0") { out.pm10 = val; hit = true; }
+  }
+  return hit ? out : null;
+}
+
+function parsePmJson(line) {
+  if (!/^[\[{]/.test(line)) return null;
+  try {
+    const o = JSON.parse(line);
+    const obj = Array.isArray(o) ? null : o;
+    if (!obj) return null;
+    const find = (cands) => {
+      for (const k in obj) {
+        const kn = k.toLowerCase().replace(/[\s_]/g, "");
+        if (cands.includes(kn)) return parseFloat(obj[k]);
+      }
+      return null;
+    };
+    const pm1  = find(["pm1", "pm1.0", "pm01"]);
+    const pm25 = find(["pm2.5", "pm25"]);
+    const pm10 = find(["pm10", "pm10.0"]);
+    if (pm1 == null && pm25 == null && pm10 == null) return null;
+    return { pm1, pm25, pm10 };
+  } catch (e) { return null; }
+}
+
+function parsePmCsv(line) {
+  if (/[a-df-zA-DF-Z]/.test(line.replace(/[eE]/g, ""))) return null; // letters (besides exponent) → header or not plain CSV
+  const nums = line.split(/[\s,;]+/).map(Number).filter((n) => isFinite(n));
+  // Device streams "index,PM1.0,PM2.5,PM10" — skip the leading index column.
+  if (nums.length >= 4) return { pm1: nums[1], pm25: nums[2], pm10: nums[3] };
+  if (nums.length === 3) return { pm1: nums[0], pm25: nums[1], pm10: nums[2] };
+  return null;
+}
+
+function updatePmReadout(r) {
+  if (r.pm1  != null) { $("rPm1").textContent  = r.pm1;  latest.pm.pm1  = r.pm1; }
+  if (r.pm25 != null) { $("rPm25").textContent = r.pm25; latest.pm.pm25 = r.pm25; }
+  if (r.pm10 != null) { $("rPm10").textContent = r.pm10; latest.pm.pm10 = r.pm10; }
+  $("pmLastSeen").textContent = "Last reading: " + new Date().toLocaleTimeString();
+  updateCombinedLive();
+}
+
+// =======================================================================
+//  COMBINED + LOGGING
+// =======================================================================
+function fmt(v) { return (v == null || v === "") ? "—" : v; }
+
+function updateCombinedLive() {
+  $("cPm1").textContent  = fmt(latest.pm.pm1);
+  $("cPm25").textContent = fmt(latest.pm.pm25);
+  $("cPm10").textContent = fmt(latest.pm.pm10);
+  $("cMass").textContent = fmt(latest.alicat.mass);
+  $("cSet").textContent  = fmt(latest.alicat.setpoint);
+  $("cGas").textContent  = fmt(latest.alicat.gas);
+}
+
+const CSV_HEADER = "timestamp,pm1_0_ugm3,pm2_5_ugm3,pm10_ugm3,flow_setpoint,mass_flow,gas";
+const clog = (m, c) => { $("logFileName").innerHTML = m; };
+
+let logHandle = null;   // FileSystemFileHandle
+let logOffset = 0;      // byte offset for appends
+let logActive = false;
+let logTimer = null;
+let logFallback = null; // array of rows when File System Access is unavailable
+let rowCount = 0;
+
+function byteLen(s) { return new Blob([s]).size; }
+function csvCell(v) { return (v == null) ? "" : String(v); }
+
+async function chooseLogFile() {
+  if (window.showSaveFilePicker) {
+    try {
+      logHandle = await window.showSaveFilePicker({
+        suggestedName: "pm_flow_log.csv",
+        types: [{ description: "CSV", accept: { "text/csv": [".csv"] } }],
+      });
+      const w = await logHandle.createWritable();
+      await w.write(CSV_HEADER + "\n");
+      await w.close();
+      logOffset = byteLen(CSV_HEADER + "\n");
+      logFallback = null;
+      $("logFileName").innerHTML = "Logging to: <code>" + logHandle.name + "</code>";
+      $("btnStartLog").disabled = false;
+      $("dlLink").style.display = "none";
+    } catch (e) {
+      if (e.name !== "AbortError") $("logFileName").innerHTML = "File error: " + e.message;
+    }
+  } else {
+    // Fallback: collect rows in memory, offer a download.
+    logFallback = [CSV_HEADER];
+    logHandle = null;
+    $("logFileName").innerHTML = "File System Access not supported — rows collected for download on Stop.";
+    $("btnStartLog").disabled = false;
+  }
+}
+
+async function appendRow(row) {
+  if (logHandle) {
+    const w = await logHandle.createWritable({ keepExistingData: true });
+    await w.write({ type: "write", position: logOffset, data: row });
+    await w.close();
+    logOffset += byteLen(row);
+  } else if (logFallback) {
+    logFallback.push(row.replace(/\n$/, ""));
+  }
+}
+
+function startLogging() {
+  if (!logHandle && !logFallback) { $("logFileName").innerHTML = "Choose a log file first."; return; }
+  logActive = true;
+  const ms = Math.max(200, parseInt($("logMs").value, 10) || 1000);
+  logTimer = setInterval(logTick, ms);
+  $("btnStartLog").disabled = true;
+  $("btnStopLog").disabled = false;
+  $("btnChooseFile").disabled = true;
+  $("logDot").classList.add("on");
+  $("logText").textContent = "Logging (" + ms + " ms)";
+}
+
+function stopLogging() {
+  logActive = false;
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+  $("btnStartLog").disabled = false;
+  $("btnStopLog").disabled = true;
+  $("btnChooseFile").disabled = false;
+  $("logDot").classList.remove("on");
+  $("logText").textContent = "Idle";
+  if (!logHandle && logFallback && logFallback.length > 1) offerDownload();
+}
+
+async function logTick() {
+  const ts = new Date().toISOString();
+  const p = latest.pm, a = latest.alicat;
+  const cells = [ts, csvCell(p.pm1), csvCell(p.pm25), csvCell(p.pm10),
+                 csvCell(a.setpoint), csvCell(a.mass), csvCell(a.gas)];
+  await appendRow(cells.join(",") + "\n");
+  addPreviewRow(cells);
+}
+
+function addPreviewRow(cells) {
+  rowCount++;
+  const tb = $("logTableBody");
+  const tr = document.createElement("tr");
+  tr.innerHTML = cells.map((c, i) =>
+    `<td>${i === 0 ? new Date(c).toLocaleTimeString() : (c === "" ? "—" : c)}</td>`).join("");
+  tb.insertBefore(tr, tb.firstChild);
+  while (tb.children.length > 50) tb.removeChild(tb.lastChild);
+  $("rowCount").textContent = rowCount + " rows written";
+}
+
+function offerDownload() {
+  const blob = new Blob([logFallback.join("\n") + "\n"], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = $("dlLink");
+  a.href = url;
+  a.download = "pm_flow_log.csv";
+  a.style.display = "inline-block";
+}
+
+// =======================================================================
+//  TABS + WIRING
+// =======================================================================
+function showTab(name) {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll(".tabpane").forEach((p) => p.classList.toggle("active", p.id === "tab-" + name));
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   if (!("serial" in navigator)) {
     $("nosupport").style.display = "block";
     $("btnConnect").disabled = true;
+    $("btnPmConnect").disabled = true;
   }
 
-  $("btnConnect").onclick = connect;
-  $("btnDisconnect").onclick = disconnect;
+  document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
+
+  // Flow controller
+  $("btnConnect").onclick = alicatConnect;
+  $("btnDisconnect").onclick = alicatDisconnect;
   $("btnSet").onclick = () => setFlow($("spVal").value);
   $("btnZero").onclick = () => { $("spVal").value = "0"; setFlow(0); };
   $("btnPoll").onclick = poll;
@@ -498,23 +886,34 @@ window.addEventListener("DOMContentLoaded", () => {
   $("btnAddStep").onclick = () => addStep(0, 10);
   $("btnRunProg").onclick = runProgram;
   $("btnStopProg").onclick = stopProgram;
-
-  $("autoPoll").onchange = (e) => {
-    if (e.target.checked) startAutoPoll(); else stopAutoPoll();
-  };
+  $("autoPoll").onchange = (e) => { e.target.checked ? startAutoPoll() : stopAutoPoll(); };
   $("pollMs").onchange = () => { if ($("autoPoll").checked) startAutoPoll(); };
-
   $("spVal").addEventListener("keydown", (e) => { if (e.key === "Enter") setFlow($("spVal").value); });
 
-  // Seed an example program
+  // Particulate sensor
+  $("btnPmConnect").onclick = pmConnect;
+  $("btnPmDisconnect").onclick = pmDisconnect;
+  $("btnClearPmLog").onclick = () => { $("pmlog").innerHTML = ""; };
+
+  // Combined logging
+  $("btnChooseFile").onclick = chooseLogFile;
+  $("btnStartLog").onclick = startLogging;
+  $("btnStopLog").onclick = stopLogging;
+
+  // Seed an example flow program
   addStep(5, 10);
   addStep(10, 10);
   addStep(0, 5);
 
-  log("Ready. Click Connect and pick the controller's COM port.", "log-info");
+  updateCombinedLive();
+  flog("Ready. Click Connect and pick the controller's COM port.", "log-info");
+  pmlog("Ready. Connect the particulate sensor's COM port.", "log-info");
 });
 
-window.addEventListener("beforeunload", () => { cleanup(); });
+window.addEventListener("beforeunload", () => {
+  alicat.disconnect();
+  pm.disconnect();
+});
 </script>
 </body>
 </html>

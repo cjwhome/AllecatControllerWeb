@@ -1,8 +1,16 @@
-# Alicat Mass Flow Controller — Web Serial App
+# Alicat MFC + Particulate Logger — Web Serial App
 
-A single-file, zero-install web app for controlling an **Alicat mass flow controller (MFC)** directly from your browser over a USB/RS‑232 serial port, using the [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API).
+A single-file, zero-install web app for controlling an **Alicat mass flow controller (MFC)** *and* logging a **particulate sensor** (PM1.0 / PM2.5 / PM10) directly from your browser over USB/RS‑232 serial ports, using the [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API).
 
-Set flow rates manually, watch live readings, and run **timed flow programs** (a sequence of setpoints, each held for a chosen duration) — all from one `index.html` file with no dependencies, build step, or server required.
+Set flow rates manually, watch live readings, run **timed flow programs**, and **log both devices together** to a timestamped CSV — all from one `index.html` file with no dependencies, build step, or server required.
+
+The UI is organized into three tabs:
+
+| Tab | Purpose |
+| --- | --- |
+| **Flow Controller** | Connect and command the Alicat MFC (FTDI "USB Serial Port", 19200 baud). |
+| **Particulate Sensor** | Connect and read a PM sensor (Silicon Labs CP210x, 115200 baud). |
+| **Combined + Logging** | Live snapshot of both devices and timestamped CSV logging to a file. |
 
 ![Web Serial · 19200 baud 8N1 · ASCII protocol](https://img.shields.io/badge/Web%20Serial-19200%208N1-3da9fc)
 
@@ -19,11 +27,23 @@ Set flow rates manually, watch live readings, and run **timed flow programs** (a
 
 ---
 
+### Particulate sensor
+
+- **Separate COM port** at **115200 baud, 8N1**, filtered to **Silicon Labs CP210x** (USB vendor ID `0x10C4`) devices in the port picker (toggle off to see all ports).
+- Listen-only — the app sends no commands; it just parses each streamed line.
+- Default expected line format (once per second): `index,PM1.0,PM2.5,PM10` (the leading index column is ignored). The parser also auto-detects **labeled** (`PM2.5: 12.3`) and **JSON** lines; you can force a specific mode from the **Line format** dropdown.
+
+### Combined logging
+
+- Live snapshot of PM values plus flow setpoint, mass flow, and gas.
+- Writes timestamped CSV rows at a configurable interval to a file you choose (via the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API)); browsers without it collect rows for a one-click download instead.
+- CSV columns: `timestamp, pm1_0_ugm3, pm2_5_ugm3, pm10_ugm3, flow_setpoint, mass_flow, gas` (timestamp is ISO‑8601).
+
 ## Requirements
 
 - A **Chromium-based desktop browser**: Chrome, Edge, or Opera. Web Serial is **not** available in Firefox or Safari, nor on mobile.
 - The page must be served from a **secure context**: `https://`, `localhost`, or opened as a local `file://`.
-- An Alicat MFC connected via a USB or RS‑232 serial adapter, and the COM port it enumerates as.
+- An Alicat MFC and/or PM sensor connected via USB/RS‑232 adapters, and the COM ports they enumerate as. The two devices connect independently — you can use either or both.
 
 ---
 
