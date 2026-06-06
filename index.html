@@ -142,6 +142,12 @@
         <span class="status"><span id="dot" class="dot"></span><span id="connText">Disconnected</span></span>
       </div>
     </div>
+    <div class="mini" style="margin-top:10px">
+      <label style="display:inline-flex;align-items:center;margin:0;color:var(--muted)">
+        <input type="checkbox" id="filterPort" checked style="width:auto;margin-right:6px">
+        Only show <b style="margin:0 4px">USB Serial Port</b> (FTDI) devices in the port picker
+      </label>
+    </div>
     <div class="mini">The unit ID is a single letter (A&ndash;Z). Default from factory is A; yours is set to D. All commands are addressed to this ID.</div>
   </div>
 
@@ -233,6 +239,12 @@ let pendingResolve = null; // resolves with next received line (for command/resp
 
 const $ = (id) => document.getElementById(id);
 
+// Windows names FTDI-based adapters "USB Serial Port (COMx)". Alicat USB
+// cables use FTDI chips (USB vendor ID 0x0403), so this filter narrows the
+// port picker to those devices. Web Serial can only filter by USB VID/PID,
+// not by the friendly name string.
+const USB_SERIAL_FILTERS = [{ usbVendorId: 0x0403 }];
+
 // ---------- Logging ----------
 function log(msg, cls = "log-info") {
   const el = $("log");
@@ -248,7 +260,8 @@ function log(msg, cls = "log-info") {
 async function connect() {
   if (!("serial" in navigator)) return;
   try {
-    port = await navigator.serial.requestPort();
+    const reqOpts = $("filterPort").checked ? { filters: USB_SERIAL_FILTERS } : {};
+    port = await navigator.serial.requestPort(reqOpts);
     const baudRate = parseInt($("baud").value, 10);
     await port.open({ baudRate, dataBits: 8, stopBits: 1, parity: "none", flowControl: "none" });
 
