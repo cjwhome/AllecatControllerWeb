@@ -133,6 +133,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="flow">Flow Controller</button>
     <button class="tab" data-tab="pm">Particulate Sensor</button>
+    <button class="tab" data-tab="valve">Six Port Valve</button>
     <button class="tab" data-tab="combined">Combined + Logging</button>
   </div>
 
@@ -317,6 +318,128 @@
     </div>
   </div>
 
+  <!-- ================= SIX PORT VALVE TAB ================= -->
+  <div class="tabpane" id="tab-valve">
+    <!-- CONNECTION -->
+    <div class="panel">
+      <h2>Six Port Valve Connection</h2>
+      <div class="row tight">
+        <div style="flex:0 0 120px">
+          <label>Baud rate</label>
+          <select id="vBaud">
+            <option selected>9600</option>
+            <option>19200</option>
+            <option>38400</option>
+            <option>57600</option>
+            <option>115200</option>
+          </select>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="btnVConnect">Connect</button>
+        </div>
+        <div style="flex:0 0 auto">
+          <button id="btnVDisconnect" class="secondary" disabled>Disconnect</button>
+        </div>
+        <div style="flex:1; text-align:right">
+          <span class="status"><span id="vDot" class="dot"></span><span id="vConnText">Disconnected</span></span>
+        </div>
+      </div>
+      <div class="mini" style="margin-top:10px">
+        <label style="display:inline-flex;align-items:center;margin:0;color:var(--muted)">
+          <input type="checkbox" id="vFilterPort" checked style="width:auto;margin-right:6px">
+          Only show <b style="margin:0 4px">USB Serial Port</b> (FTDI) devices in the port picker
+        </label>
+      </div>
+      <div class="mini">9600 baud, 8N1. The RedBoard sketch (<code>sixportvalveControl.cpp</code>) accepts single-key menu commands and, while in continuous mode, live dwell tuning via <code>d&lt;ms&gt;</code> (FILL) and <code>j&lt;ms&gt;</code> (INJECTION).</div>
+    </div>
+
+    <div class="grid">
+      <!-- VALVE CONTROL -->
+      <div class="panel">
+        <h2>Valve Control</h2>
+        <div class="readout" style="grid-template-columns:repeat(2,1fr)">
+          <div class="metric"><div class="k">Mode</div><div class="v" id="vMode" style="font-size:16px">Idle</div></div>
+          <div class="metric"><div class="k">Last status</div><div class="v" id="vPhase" style="font-size:13px">&mdash;</div></div>
+        </div>
+        <div class="row tight" style="margin-top:14px">
+          <div style="flex:0 0 auto"><button id="btnVFill" class="secondary" disabled>Go to FILL</button></div>
+          <div style="flex:0 0 auto"><button id="btnVInject" class="secondary" disabled>Go to INJECTION</button></div>
+        </div>
+        <div class="row tight" style="margin-top:10px">
+          <div style="flex:0 0 auto"><button id="btnVContinuous" disabled>Start continuous</button></div>
+          <div style="flex:0 0 auto"><button id="btnVStop" class="danger" disabled>Stop (x)</button></div>
+        </div>
+        <div class="row tight" style="margin-top:10px">
+          <div style="flex:0 0 auto"><button id="btnVCalibrate" class="secondary" disabled>Calibrate</button></div>
+          <div style="flex:0 0 auto"><button id="btnVSaveCal" class="secondary" disabled>Save cal</button></div>
+          <div style="flex:0 0 auto"><button id="btnVLoadCal" class="secondary" disabled>Load cal</button></div>
+          <div style="flex:0 0 auto"><button id="btnVViewCal" class="secondary" disabled>View cal</button></div>
+        </div>
+        <div class="mini" style="margin-top:10px">Continuous mode cycles FILL (rev) &harr; INJECTION (fwd). Phase/calibration buttons only work while continuous mode is stopped.</div>
+      </div>
+
+      <!-- DWELL TIMES -->
+      <div class="panel">
+        <h2>Dwell Times</h2>
+        <div class="row">
+          <div>
+            <label>INJECTION dwell (ms)</label>
+            <input id="vInjDwell" type="number" value="250" min="0" max="600000" step="1">
+          </div>
+          <div style="flex:0 0 auto">
+            <button id="btnVSetInj" disabled>Set</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>FILL dwell (ms)</label>
+            <input id="vFillDwell" type="number" value="500" min="0" max="600000" step="1">
+          </div>
+          <div style="flex:0 0 auto">
+            <button id="btnVSetFill" disabled>Set</button>
+          </div>
+        </div>
+        <div class="readout" style="grid-template-columns:repeat(2,1fr);margin-top:14px">
+          <div class="metric"><div class="k">Current INJ dwell</div><div class="v" id="vInjNow">&mdash;</div><div class="u">ms</div></div>
+          <div class="metric"><div class="k">Current FILL dwell</div><div class="v" id="vFillNow">&mdash;</div><div class="u">ms</div></div>
+        </div>
+        <div class="mini" style="margin-top:10px">Sends <code>j&lt;ms&gt;</code> / <code>d&lt;ms&gt;</code> live while continuous mode runs. Clamped to 0&ndash;600000 ms by the firmware.</div>
+      </div>
+    </div>
+
+    <!-- TIMED DWELL PROGRAM -->
+    <div class="panel">
+      <h2>Timed Dwell Program</h2>
+      <table id="vProgTable">
+        <thead>
+          <tr><th></th><th>INJECTION dwell (ms)</th><th>FILL dwell (ms)</th><th>Hold (seconds)</th><th></th></tr>
+        </thead>
+        <tbody id="vProgBody"></tbody>
+      </table>
+      <div class="row tight" style="margin-top:12px">
+        <div style="flex:0 0 auto"><button id="btnVAddStep" class="secondary">+ Add step</button></div>
+        <div style="flex:0 0 auto"><button id="btnVRunProg" disabled>Run program</button></div>
+        <div style="flex:0 0 auto"><button id="btnVStopProg" class="danger" disabled>Stop</button></div>
+        <div style="flex:0 0 auto">
+          <label style="margin:0"><input type="checkbox" id="vLoopProg" style="width:auto;margin-right:6px">Loop</label>
+        </div>
+        <div style="flex:0 0 auto">
+          <label style="margin:0"><input type="checkbox" id="vAutoCont" checked style="width:auto;margin-right:6px">Auto start/stop continuous</label>
+        </div>
+        <div style="flex:1; text-align:right">
+          <span id="vProgStatus" class="status"><span class="timer" id="vProgTimer"></span></span>
+        </div>
+      </div>
+      <div class="mini">Each step sets the injection (and fill) dwell time, holds it for the given seconds while the valve cycles in continuous mode, then advances. With <b>Auto start/stop continuous</b> on, the program sends <code>C</code> first and <code>x</code> when it finishes.</div>
+    </div>
+
+    <!-- LOG -->
+    <div class="panel">
+      <h2>Six Port Valve Log <button id="btnClearVLog" class="secondary" style="float:right;padding:4px 10px;font-size:12px">Clear</button></h2>
+      <div id="vlog" class="logbox"></div>
+    </div>
+  </div>
+
   <!-- ================= COMBINED + LOGGING TAB ================= -->
   <div class="tabpane" id="tab-combined">
     <div class="panel">
@@ -451,6 +574,7 @@ class SerialConn {
 
 const alicat = new SerialConn("alicat", FTDI_FILTERS);
 const pm = new SerialConn("pm", CP210X_FILTERS);
+const valve = new SerialConn("valve", FTDI_FILTERS);
 
 // ---------- Logging helpers ----------
 function logTo(boxId, msg, cls = "log-info") {
@@ -464,6 +588,7 @@ function logTo(boxId, msg, cls = "log-info") {
 }
 const flog = (m, c) => logTo("log", m, c);
 const pmlog = (m, c) => logTo("pmlog", m, c);
+const vlog = (m, c) => logTo("vlog", m, c);
 
 // =======================================================================
 //  ALICAT FLOW CONTROLLER
@@ -743,6 +868,291 @@ function updatePmReadout(r) {
 }
 
 // =======================================================================
+//  SIX PORT VALVE  (RedBoard — sixportvalveControl.cpp)
+// =======================================================================
+// Tracks whether the firmware is in its blocking continuous loop. While true,
+// only x / d<ms> / j<ms> are honored by the sketch (pollAbortKey); the single-
+// key phase/calibration commands are ignored until continuous mode stops.
+let valveContinuous = false;
+let valveMenuSeen = false; // set once the boot menu has finished printing
+
+// Resolve a promise when a future RX line matches a pattern (or on timeout).
+// The board resets on port open and runs a blocking loop, so we often need to
+// wait for a specific firmware echo before sending the next command.
+let valveLineWaiters = [];
+function valveWaitFor(re, timeoutMs) {
+  return new Promise((resolve) => {
+    const w = { re, resolve: null };
+    let done = false;
+    const finish = (line) => {
+      if (done) return;
+      done = true;
+      valveLineWaiters = valveLineWaiters.filter((x) => x !== w);
+      resolve(line);
+    };
+    w.resolve = finish;
+    valveLineWaiters.push(w);
+    setTimeout(() => finish(null), timeoutMs);
+  });
+}
+
+function setValveButtons() {
+  const on = valve.connected;
+  const idle = on && !valveContinuous;
+  $("btnVConnect").disabled = on;
+  $("btnVDisconnect").disabled = !on;
+  // Phase + calibration commands only work from the idle menu.
+  $("btnVFill").disabled = !idle;
+  $("btnVInject").disabled = !idle;
+  $("btnVCalibrate").disabled = !idle;
+  $("btnVSaveCal").disabled = !idle;
+  $("btnVLoadCal").disabled = !idle;
+  $("btnVViewCal").disabled = !idle;
+  $("btnVContinuous").disabled = !idle;
+  $("btnVStop").disabled = !on || !valveContinuous;
+  // Dwell can be set live (continuous) or via the menu (idle).
+  $("btnVSetInj").disabled = !on;
+  $("btnVSetFill").disabled = !on;
+  $("btnVRunProg").disabled = !on || vProgRunning;
+}
+
+function setValveMode(running) {
+  valveContinuous = running;
+  $("vMode").textContent = running ? "Continuous" : "Idle";
+  $("vMode").style.color = running ? "var(--good)" : "var(--text)";
+  setValveButtons();
+}
+
+valve.onStatus = (on) => {
+  $("vDot").classList.toggle("on", on);
+  $("vConnText").textContent = on ? "Connected" : "Disconnected";
+  if (!on) valveContinuous = false;
+  $("vMode").textContent = on ? (valveContinuous ? "Continuous" : "Idle") : "Idle";
+  setValveButtons();
+};
+
+valve.onLine = (line) => {
+  vlog("RX  " + line, "log-rx");
+
+  // Wake any pending waiters first.
+  for (const w of [...valveLineWaiters]) {
+    if (w.re.test(line)) w.resolve(line);
+  }
+
+  // The boot menu's last lines: the 'P' option, then the EEPROM load result.
+  if (/Set step period|EEPROM:|run 'K'/i.test(line)) valveMenuSeen = true;
+
+  // Track running state and current dwell values from the firmware's echoes.
+  // Match ONLY the runtime banner "Continuous Fill(REV) <-> Injection(FWD)…",
+  // which starts the line with "Continuous Fill(". The boot menu's option line
+  // "C. Continuous FILL (rev) <-> …" must NOT match (it starts with "C. ").
+  if (/^Continuous Fill\(/i.test(line)) setValveMode(true);
+  if (/Continuous mode stopped/i.test(line)) setValveMode(false);
+
+  let m;
+  if ((m = line.match(/injectDwellMs\s*=\s*(\d+)/i)) || (m = line.match(/INJECTION dwell set to\s*(\d+)/i))) {
+    $("vInjNow").textContent = m[1];
+  }
+  if ((m = line.match(/(?:^|[^a-z])dwellMs\s*=\s*(\d+)/i)) || (m = line.match(/FILL dwell set to\s*(\d+)/i))) {
+    $("vFillNow").textContent = m[1];
+  }
+  // Show the most recent "Reached ..." / "Verify ..." style status line.
+  if (/Reached|Verify|Seeking|Calibration|EEPROM|Locked/i.test(line)) {
+    $("vPhase").textContent = line;
+  }
+};
+
+// Pulse DTR/RTS to trigger the Arduino auto-reset. Opening the port only
+// sometimes resets the RedBoard; without a guaranteed reset it can be in an
+// unknown state where the first 'C' is ignored. Toggling these lines puts the
+// cap-coupled RESET edge in every time, so the sketch reliably reboots and
+// reprints its menu on connect. setSignals may be unsupported — fail soft.
+async function valveResetBoard() {
+  const p = valve.port;
+  if (!p || !p.setSignals) return false;
+  try {
+    await p.setSignals({ dataTerminalReady: true, requestToSend: true });
+    await sleep(60);
+    await p.setSignals({ dataTerminalReady: false, requestToSend: false });
+    await sleep(60);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function valveConnect() {
+  try {
+    const baud = parseInt($("vBaud").value, 10);
+    valveMenuSeen = false;
+    valveContinuous = false;
+    await valve.connect(baud, $("vFilterPort").checked);
+    vlog(`Connected @ ${baud} baud`, "log-info");
+    // Force a clean reset so the board always boots into a known state.
+    const reset = await valveResetBoard();
+    vlog(reset ? "Resetting board…" : "Waiting for boot menu…", "log-info");
+    // The RedBoard prints its menu ~2s after reset.
+    const menu = await valveWaitFor(/Set step period|EEPROM:|run 'K'/i, 6000);
+    if (menu) {
+      vlog("Valve ready (menu received).", "log-info");
+    } else {
+      vlog("No boot menu seen — board may already be running. Proceeding.", "log-info");
+      // Last resort: nudge with a harmless newline so the menu loop is awake.
+      await valve.write("\n");
+    }
+  } catch (err) {
+    vlog("Connect failed: " + err.message, "log-err");
+    await valve.disconnect();
+  }
+}
+
+async function valveDisconnect() {
+  stopValveProgram();
+  await valve.disconnect();
+  vlog("Disconnected", "log-info");
+}
+
+// Single-key menu command (no terminator — the sketch reads char-by-char).
+async function valveCmd(ch) {
+  if (!valve.connected) { vlog("Not connected", "log-err"); return; }
+  vlog("TX  " + ch, "log-tx");
+  await valve.write(ch);
+}
+
+// Live dwell command for continuous mode: "j<ms>\n" / "d<ms>\n".
+async function valveLiveDwell(kind, ms) {
+  const ch = (kind === "inject") ? "j" : "d";
+  const cmd = ch + ms;
+  vlog("TX  " + cmd, "log-tx");
+  await valve.write(cmd + "\n");
+}
+
+// Set a dwell value. While continuous mode runs, use the live d/j tuning path.
+// While idle, drive the D/J menu: send the key, let the firmware open its input
+// prompt (which flushes pending bytes), then send the number.
+async function valveSetDwell(kind, ms) {
+  if (!valve.connected) { vlog("Not connected", "log-err"); return; }
+  const v = Math.max(0, Math.min(600000, Math.round(Number(ms) || 0)));
+  if (valveContinuous) {
+    await valveLiveDwell(kind, v);
+  } else {
+    const ch = (kind === "inject") ? "J" : "D";
+    vlog(`TX  ${ch} then ${v}`, "log-tx");
+    await valve.write(ch);
+    await sleep(120);            // let readUintFromSerial() flush + start reading
+    await valve.write(v + "\r");
+  }
+  if (kind === "inject") $("vInjNow").textContent = v;
+  else $("vFillNow").textContent = v;
+}
+
+// Send 'C' and wait for the firmware's "Continuous Fill…" banner so we KNOW the
+// blocking continuous loop is running before sending any live dwell commands.
+// Returns true on confirmation.
+async function valveStartContinuous() {
+  if (!valve.connected) { vlog("Not connected", "log-err"); return false; }
+  if (valveContinuous) return true;
+  await valveCmd("C");
+  const ok = await valveWaitFor(/^Continuous Fill\(/i, 4000);
+  if (ok) { setValveMode(true); return true; }
+  vlog("No continuous-mode confirmation from valve.", "log-err");
+  return false;
+}
+
+async function valveStop() {
+  // 'x' aborts the continuous loop; it stops after finishing the current move.
+  vlog("TX  x", "log-tx");
+  await valve.write("x");
+}
+
+// ---- Timed dwell program (mirrors the flow controller's timed program) ----
+let vProgRunning = false;
+let vProgAbort = null;
+
+function vAddStep(inj = 250, fill = 500, secs = 60) {
+  const tbody = $("vProgBody");
+  const tr = document.createElement("tr");
+  tr.className = "prog-row";
+  tr.innerHTML = `
+    <td class="idx"></td>
+    <td><input type="number" step="1" min="0" max="600000" class="v-inj" value="${inj}"></td>
+    <td><input type="number" step="1" min="0" max="600000" class="v-fill" value="${fill}"></td>
+    <td><input type="number" step="0.1" min="0" class="v-secs" value="${secs}"></td>
+    <td><button class="secondary del" style="padding:4px 10px">✕</button></td>`;
+  tr.querySelector(".del").onclick = () => { tr.remove(); vRenumber(); };
+  tbody.appendChild(tr);
+  vRenumber();
+}
+function vRenumber() {
+  [...$("vProgBody").children].forEach((tr, i) => { tr.querySelector(".idx").textContent = i + 1; });
+}
+function vReadSteps() {
+  return [...$("vProgBody").children].map((tr) => ({
+    tr,
+    inj: Math.max(0, Math.min(600000, Number(tr.querySelector(".v-inj").value))),
+    fill: Math.max(0, Math.min(600000, Number(tr.querySelector(".v-fill").value))),
+    secs: Math.max(0, Number(tr.querySelector(".v-secs").value)),
+  }));
+}
+
+async function runValveProgram() {
+  const steps = vReadSteps();
+  if (!steps.length) { vlog("No program steps", "log-err"); return; }
+  vProgRunning = true;
+  vProgAbort = { stop: false };
+  const myAbort = vProgAbort;
+  $("btnVRunProg").disabled = true;
+  $("btnVStopProg").disabled = false;
+  vlog("Dwell program started (" + steps.length + " steps)", "log-info");
+
+  const auto = $("vAutoCont").checked;
+  if (auto && !valveContinuous) {
+    vlog("Starting continuous mode…", "log-info");
+    const ok = await valveStartContinuous();
+    if (!ok) {
+      vlog("Could not enter continuous mode — aborting program.", "log-err");
+      stopValveProgram();
+      return;
+    }
+  } else if (!valveContinuous) {
+    vlog("Valve not in continuous mode — dwell commands may not apply. Enable 'Auto start/stop continuous' or start it first.", "log-err");
+  }
+
+  do {
+    for (let i = 0; i < steps.length && !myAbort.stop; i++) {
+      const s = steps[i];
+      steps.forEach((x) => x.tr.classList.remove("active"));
+      s.tr.classList.add("active");
+      vlog(`Step ${i + 1}: inj ${s.inj}ms / fill ${s.fill}ms for ${s.secs}s`, "log-info");
+      await valveLiveDwell("inject", s.inj);
+      $("vInjNow").textContent = s.inj;
+      await sleep(60);
+      await valveLiveDwell("fill", s.fill);
+      $("vFillNow").textContent = s.fill;
+      const endAt = Date.now() + s.secs * 1000;
+      while (Date.now() < endAt && !myAbort.stop) {
+        const remain = Math.ceil((endAt - Date.now()) / 1000);
+        $("vProgTimer").textContent = `Step ${i + 1}/${steps.length} · ${remain}s left`;
+        await sleep(200);
+      }
+    }
+  } while (!myAbort.stop && $("vLoopProg").checked);
+
+  steps.forEach((x) => x.tr.classList.remove("active"));
+  if (auto && valveContinuous) await valveStop();
+  stopValveProgram();
+}
+
+function stopValveProgram() {
+  if (vProgAbort) vProgAbort.stop = true;
+  vProgRunning = false;
+  $("btnVStopProg").disabled = true;
+  $("btnVRunProg").disabled = !valve.connected;
+  $("vProgTimer").textContent = "";
+  [...$("vProgBody").children].forEach((tr) => tr.classList.remove("active"));
+}
+
+// =======================================================================
 //  COMBINED + LOGGING
 // =======================================================================
 function fmt(v) { return (v == null || v === "") ? "—" : v; }
@@ -872,6 +1282,7 @@ window.addEventListener("DOMContentLoaded", () => {
     $("nosupport").style.display = "block";
     $("btnConnect").disabled = true;
     $("btnPmConnect").disabled = true;
+    $("btnVConnect").disabled = true;
   }
 
   document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
@@ -895,6 +1306,24 @@ window.addEventListener("DOMContentLoaded", () => {
   $("btnPmDisconnect").onclick = pmDisconnect;
   $("btnClearPmLog").onclick = () => { $("pmlog").innerHTML = ""; };
 
+  // Six port valve
+  $("btnVConnect").onclick = valveConnect;
+  $("btnVDisconnect").onclick = valveDisconnect;
+  $("btnVFill").onclick = () => valveCmd("F");
+  $("btnVInject").onclick = () => valveCmd("I");
+  $("btnVContinuous").onclick = valveStartContinuous;
+  $("btnVStop").onclick = valveStop;
+  $("btnVCalibrate").onclick = () => valveCmd("K");
+  $("btnVSaveCal").onclick = () => valveCmd("S");
+  $("btnVLoadCal").onclick = () => valveCmd("L");
+  $("btnVViewCal").onclick = () => valveCmd("V");
+  $("btnVSetInj").onclick = () => valveSetDwell("inject", $("vInjDwell").value);
+  $("btnVSetFill").onclick = () => valveSetDwell("fill", $("vFillDwell").value);
+  $("btnClearVLog").onclick = () => { $("vlog").innerHTML = ""; };
+  $("btnVAddStep").onclick = () => vAddStep(250, 500, 60);
+  $("btnVRunProg").onclick = runValveProgram;
+  $("btnVStopProg").onclick = stopValveProgram;
+
   // Combined logging
   $("btnChooseFile").onclick = chooseLogFile;
   $("btnStartLog").onclick = startLogging;
@@ -905,14 +1334,21 @@ window.addEventListener("DOMContentLoaded", () => {
   addStep(10, 10);
   addStep(0, 5);
 
+  // Seed an example dwell program: inject dwell ms / fill dwell ms / hold secs
+  vAddStep(250, 500, 60);
+  vAddStep(500, 500, 60);
+  vAddStep(1000, 500, 60);
+
   updateCombinedLive();
   flog("Ready. Click Connect and pick the controller's COM port.", "log-info");
   pmlog("Ready. Connect the particulate sensor's COM port.", "log-info");
+  vlog("Ready. Connect the six port valve's COM port (9600 baud).", "log-info");
 });
 
 window.addEventListener("beforeunload", () => {
   alicat.disconnect();
   pm.disconnect();
+  valve.disconnect();
 });
 </script>
 </body>
