@@ -37,7 +37,7 @@ The UI is organized into three tabs:
 
 - Live snapshot of PM values plus flow setpoint, mass flow, and gas.
 - Writes timestamped CSV rows at a configurable interval to a file you choose (via the [File System Access API](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API)); browsers without it collect rows for a one-click download instead.
-- CSV columns: `timestamp, pm1_0_ugm3, pm2_5_ugm3, pm10_ugm3, flow_setpoint, mass_flow, gas` (timestamp is ISO‑8601).
+- CSV columns: `timestamp, pm1_0_ugm3, pm2_5_ugm3, pm10_ugm3, flow_setpoint, mass_flow` (timestamp is ISO‑8601).
 
 ## Requirements
 

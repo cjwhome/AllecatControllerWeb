@@ -351,7 +351,7 @@
           <a id="dlLink" class="dl" href="#">Download CSV</a>
         </div>
       </div>
-      <div class="mini" id="logFileName">No log file chosen. Columns: <code>timestamp, pm1_0, pm2_5, pm10, flow_setpoint, mass_flow, gas</code></div>
+      <div class="mini" id="logFileName">No log file chosen. Columns: <code>timestamp, pm1_0, pm2_5, pm10, flow_setpoint, mass_flow</code></div>
     </div>
 
     <div class="panel">
@@ -359,7 +359,7 @@
       <div style="max-height:260px;overflow-y:auto">
         <table id="logTable">
           <thead>
-            <tr><th>Timestamp</th><th>PM1.0</th><th>PM2.5</th><th>PM10</th><th>Setpoint</th><th>Mass</th><th>Gas</th></tr>
+            <tr><th>Timestamp</th><th>PM1.0</th><th>PM2.5</th><th>PM10</th><th>Setpoint</th><th>Mass</th></tr>
           </thead>
           <tbody id="logTableBody"></tbody>
         </table>
@@ -756,7 +756,7 @@ function updateCombinedLive() {
   $("cGas").textContent  = fmt(latest.alicat.gas);
 }
 
-const CSV_HEADER = "timestamp,pm1_0_ugm3,pm2_5_ugm3,pm10_ugm3,flow_setpoint,mass_flow,gas";
+const CSV_HEADER = "timestamp,pm1_0_ugm3,pm2_5_ugm3,pm10_ugm3,flow_setpoint,mass_flow";
 const clog = (m, c) => { $("logFileName").innerHTML = m; };
 
 let logHandle = null;   // FileSystemFileHandle
@@ -834,7 +834,7 @@ async function logTick() {
   const ts = new Date().toISOString();
   const p = latest.pm, a = latest.alicat;
   const cells = [ts, csvCell(p.pm1), csvCell(p.pm25), csvCell(p.pm10),
-                 csvCell(a.setpoint), csvCell(a.mass), csvCell(a.gas)];
+                 csvCell(a.setpoint), csvCell(a.mass)];
   await appendRow(cells.join(",") + "\n");
   addPreviewRow(cells);
 }
